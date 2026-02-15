@@ -11,7 +11,6 @@ public class HarvestPickerSettings : ISettings
     public ToggleNode Enable { get; set; } = new ToggleNode(false);
 
     public ListNode League { get; set; } = new ListNode() { Value = "Necropolis" };
-    public RangeNode<int> PriceRefreshPeriodMinutes { get; set; } = new RangeNode<int>(15, 5, 60);
 
     [JsonIgnore]
     public ButtonNode ReloadPrices { get; set; } = new ButtonNode();
@@ -30,4 +29,11 @@ public class HarvestPickerSettings : ISettings
     public RangeNode<float> CropRotationT1UpgradeChance { get; set; } = new RangeNode<float>(0.33f, 0, 1f);
     public RangeNode<float> CropRotationT2UpgradeChance { get; set; } = new RangeNode<float>(0.33f, 0, 1f);
     public RangeNode<float> CropRotationT3UpgradeChance { get; set; } = new RangeNode<float>(0.33f, 0, 1f);
+
+    public ToggleNode UseManualRates { get; set; } = new ToggleNode(false);
+    public RangeNode<float> DivineOrbPrice { get; set; } = new RangeNode<float>(150, 1, 10000);
+    public RangeNode<float> VividLifeforcePerDivine { get; set; } = new RangeNode<float>(5000, 1, 50000);
+    public RangeNode<float> PrimalLifeforcePerDivine { get; set; } = new RangeNode<float>(5000, 1, 50000);
+    public RangeNode<float> WildLifeforcePerDivine { get; set; } = new RangeNode<float>(5000, 1, 50000);
+    public RangeNode<float> SacredLifeforcePerDivine { get; set; } = new RangeNode<float>(1, 1, 100);
 }

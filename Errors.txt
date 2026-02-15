@@ -1,0 +1,2 @@
+Build failed:
+[15/02/2026 19:22:03, C:\Users\Miguel\Desktop\Juegos\Path of Exile\ExileApi-Compiled-327.12 - copia\Plugins\Source\HarvestPicker\HarvestPicker.cs(481, 52)] CS0246: El nombre del tipo o del espacio de nombres 'RangeNode<>' no se encontró (¿falta una directiva using o una referencia de ensamblado?)

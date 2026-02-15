@@ -17,6 +17,8 @@ using Vector2 = System.Numerics.Vector2;
 using static MoreLinq.Extensions.PermutationsExtension;
 using System.Web;
 using ExileCore.Shared.Helpers;
+using ImGuiNET;
+using ExileCore.Shared.Nodes;
 
 namespace HarvestPicker;
 
@@ -32,12 +34,11 @@ public class HarvestPicker : BaseSettingsPlugin<HarvestPickerSettings>
 {
     public override bool Initialise()
     {
-        _pricesGetter = LoadPricesFromDisk(false);
-        Settings.ReloadPrices.OnPressed = () => { _pricesGetter = LoadPricesFromDisk(true); };
+        _pricesGetter = LoadPricesFromDisk();
+        Settings.ReloadPrices.OnPressed = () => { _pricesGetter = FetchPrices(); };
         return true;
     }
 
-    private readonly Stopwatch _lastRetrieveStopwatch = new Stopwatch();
     private Task _pricesGetter;
     private HarvestPrices _prices;
     private List<((Entity, double), (Entity, double))> _irrigatorPairs;
@@ -80,17 +81,25 @@ public class HarvestPicker : BaseSettingsPlugin<HarvestPickerSettings>
     {
         get
         {
+            if (Settings.UseManualRates)
+            {
+                return new HarvestPrices
+                {
+                    YellowJuiceValue = Settings.DivineOrbPrice.Value / Settings.VividLifeforcePerDivine.Value,
+                    BlueJuiceValue = Settings.DivineOrbPrice.Value / Settings.PrimalLifeforcePerDivine.Value,
+                    PurpleJuiceValue = Settings.DivineOrbPrice.Value / Settings.WildLifeforcePerDivine.Value,
+                    WhiteJuiceValue = Settings.DivineOrbPrice.Value / Settings.SacredLifeforcePerDivine.Value,
+                };
+            }
+
             if (_pricesGetter is { IsCompleted: true })
             {
                 _pricesGetter = null;
             }
 
-            if ((!_lastRetrieveStopwatch.IsRunning ||
-                 _lastRetrieveStopwatch.Elapsed >= TimeSpan.FromMinutes(Settings.PriceRefreshPeriodMinutes)) &&
-                _pricesGetter == null)
+            if (_pricesGetter == null && _prices == null)
             {
                 _pricesGetter = FetchPrices();
-                _lastRetrieveStopwatch.Reset();
             }
 
             return _prices;
@@ -139,6 +148,11 @@ public class HarvestPicker : BaseSettingsPlugin<HarvestPickerSettings>
                 PurpleJuiceValue = dataMap.GetValueOrDefault("Wild Crystallised Lifeforce") ?? 0,
                 WhiteJuiceValue = dataMap.GetValueOrDefault("Sacred Crystallised Lifeforce") ?? 0,
             };
+
+            if (dataMap.TryGetValue("Divine Orb", out var divinePrice) && divinePrice != null)
+            {
+                Settings.DivineOrbPrice.Value = (float)divinePrice;
+            }
             await File.WriteAllTextAsync(CachePath, JsonConvert.SerializeObject(_prices));
             Log("Data update complete");
         }
@@ -146,13 +160,10 @@ public class HarvestPicker : BaseSettingsPlugin<HarvestPickerSettings>
         {
             DebugWindow.LogError(ex.ToString());
         }
-        finally
-        {
-            _lastRetrieveStopwatch.Restart();
-        }
+
     }
 
-    private async Task LoadPricesFromDisk(bool force)
+    private async Task LoadPricesFromDisk()
     {
         await Task.Yield();
         try
@@ -163,22 +174,11 @@ public class HarvestPicker : BaseSettingsPlugin<HarvestPickerSettings>
             {
                 _prices = JsonConvert.DeserializeObject<HarvestPrices>(await File.ReadAllTextAsync(cachePath));
                 Log("Data loaded from disk");
-                if (force)
-                {
-                    _lastRetrieveStopwatch.Reset();
-                }
-                else
-                {
-                    if (DateTime.UtcNow - File.GetLastWriteTimeUtc(cachePath) < TimeSpan.FromMinutes(Settings.PriceRefreshPeriodMinutes))
-                    {
-                        _lastRetrieveStopwatch.Restart();
-                    }
-                }
             }
             else
             {
                 Log("Cached data doesn't exist");
-                _lastRetrieveStopwatch.Reset();
+                _pricesGetter = FetchPrices();
             }
         }
         catch (Exception ex)
@@ -463,4 +463,140 @@ public class HarvestPicker : BaseSettingsPlugin<HarvestPickerSettings>
 
     }
 
+    public override void DrawSettings()
+    {
+        // base.DrawSettings();
+
+        var enable = Settings.Enable.Value;
+        if (ImGui.Checkbox("Enable", ref enable))
+        {
+            Settings.Enable.Value = enable;
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+
+        // League
+        var league = Settings.League.Value;
+        if (Settings.League.Values != null && ImGui.BeginCombo("League", league))
+        {
+            foreach (var l in Settings.League.Values)
+            {
+                bool isSelected = (league == l);
+                if (ImGui.Selectable(l, isSelected))
+                {
+                    Settings.League.Value = l;
+                }
+                if (isSelected)
+                {
+                    ImGui.SetItemDefaultFocus();
+                }
+            }
+            ImGui.EndCombo();
+        }
+
+        if (ImGui.Button("Reload Prices"))
+        {
+             Settings.ReloadPrices.OnPressed?.Invoke();
+        }
+
+        var drawRotation = Settings.DrawRotationOnMap.Value;
+        if (ImGui.Checkbox("Draw Rotation On Map", ref drawRotation))
+        {
+            Settings.DrawRotationOnMap.Value = drawRotation;
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Text("Colors");
+
+        // Colors
+        Settings.BadColor.Value = DrawColor("Bad Color", Settings.BadColor.Value);
+        Settings.NeutralColor.Value = DrawColor("Neutral Color", Settings.NeutralColor.Value);
+        Settings.GoodColor.Value = DrawColor("Good Color", Settings.GoodColor.Value);
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Text("Calculations");
+
+        DrawSliderInt("Seeds Per T1", Settings.SeedsPerT1Plant);
+        DrawSliderInt("Seeds Per T2", Settings.SeedsPerT2Plant);
+        DrawSliderInt("Seeds Per T3", Settings.SeedsPerT3Plant);
+        DrawSliderInt("Seeds Per T4", Settings.SeedsPerT4Plant);
+        DrawSliderFloat("T4 White Chance", Settings.T4PlantWhiteSeedChance);
+
+        ImGui.Spacing();
+        ImGui.Text("Crop Rotation Upgrade Chances");
+        DrawSliderFloat("T1 Upgrade Chance", Settings.CropRotationT1UpgradeChance);
+        DrawSliderFloat("T2 Upgrade Chance", Settings.CropRotationT2UpgradeChance);
+        DrawSliderFloat("T3 Upgrade Chance", Settings.CropRotationT3UpgradeChance);
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Text("Prices");
+
+        var useManual = Settings.UseManualRates.Value;
+        if (ImGui.Checkbox("Use Manual Rates", ref useManual))
+        {
+            Settings.UseManualRates.Value = useManual;
+        }
+
+        if (Settings.UseManualRates)
+        {
+            ImGui.Indent();
+            DrawSliderWithInput("Divine Orb Price", Settings.DivineOrbPrice);
+            DrawSliderWithInput("Vivid / Divine", Settings.VividLifeforcePerDivine);
+            DrawSliderWithInput("Primal / Divine", Settings.PrimalLifeforcePerDivine);
+            DrawSliderWithInput("Wild / Divine", Settings.WildLifeforcePerDivine);
+            DrawSliderWithInput("Sacred / Divine", Settings.SacredLifeforcePerDivine);
+            ImGui.Unindent();
+        }
+        else
+        {
+             ImGui.Text($"Divine Orb Price: {Settings.DivineOrbPrice.Value}");
+        }
+    }
+
+    private Color DrawColor(string label, Color color)
+    {
+        var vec = new System.Numerics.Vector4(color.R / 255f, color.G / 255f, color.B / 255f, color.A / 255f);
+        if (ImGui.ColorEdit4(label, ref vec))
+        {
+            return new Color(vec.X, vec.Y, vec.Z, vec.W);
+        }
+        return color;
+    }
+
+    private void DrawSliderInt(string label, RangeNode<int> node)
+    {
+        var value = node.Value;
+        if (ImGui.SliderInt(label, ref value, node.Min, node.Max))
+        {
+            node.Value = value;
+        }
+    }
+
+    private void DrawSliderFloat(string label, RangeNode<float> node)
+    {
+        var value = node.Value;
+        if (ImGui.SliderFloat(label, ref value, node.Min, node.Max))
+        {
+            node.Value = value;
+        }
+    }
+
+    private void DrawSliderWithInput(string label, RangeNode<float> node)
+    {
+        var value = node.Value;
+        if (ImGui.SliderFloat(label, ref value, node.Min, node.Max))
+        {
+            node.Value = value;
+        }
+        ImGui.SameLine();
+        if (ImGui.InputFloat($"##input{label}", ref value))
+        {
+            node.Value = value;
+        }
+    }
 }
