@@ -44,7 +44,7 @@ public class HarvestPicker : BaseSettingsPlugin<HarvestPickerSettings>
     private List<((Entity, double), (Entity, double))> _irrigatorPairs;
     private List<Entity> _cropRotationPath;
     private double _cropRotationValue;
-    private HashSet<(SeedData, SeedData)> _lastSeedData;
+    private HashSet<(Entity, SeedData, SeedData)> _lastSeedData;
     private string CachePath => Path.Join(ConfigDirectory, "pricecache.json");
 
     public override void AreaChange(AreaInstance area)
@@ -228,7 +228,7 @@ public class HarvestPicker : BaseSettingsPlugin<HarvestPickerSettings>
                         (ExtractSeedData(p.Item1.Item1), p.Item1.Item1),
                         (p.Item2.Item1 != null ? ExtractSeedData(p.Item2.Item1) : null, p.Item2.Item1)))
                     .ToList();
-            var currentSet = irrigatorSeedDataPairs.Select(x => (x.Plot1.Data, x.Plot2.Data)).ToHashSet();
+            var currentSet = irrigatorSeedDataPairs.Select(x => (x.Plot1.Entity, x.Plot1.Data, x.Plot2.Data)).ToHashSet();
             if (_lastSeedData == null || !_lastSeedData.SetEquals(currentSet))
             {
                 _cropRotationPath = null;
